@@ -821,6 +821,7 @@
             const [userProfile, setUserProfile] = useState(null);
             const [authTab, setAuthTab] = useState('guest'); // 'guest' | 'login' | 'register'
             const [authUsername, setAuthUsername] = useState('');
+            const [authEmail, setAuthEmail] = useState('');
             const [authPassword, setAuthPassword] = useState('');
             const [authDisplayName, setAuthDisplayName] = useState('');
             const [authOnLeaderboard, setAuthOnLeaderboard] = useState(true);
@@ -1050,12 +1051,19 @@
                 setAuthError('');
                 setAuthLoading(true);
                 
+                const cleanEmail = authEmail.trim().toLowerCase();
                 const cleanUsername = authUsername.trim().toLowerCase();
-                const cleanDisplayName = authDisplayName.trim();
+                const cleanDisplayName = cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1);
                 const cleanPassword = authPassword;
                 
-                if (!cleanUsername || !cleanDisplayName || !cleanPassword) {
+                if (!cleanEmail || !cleanUsername || !cleanPassword) {
                     setAuthError('Please fill in all fields.');
+                    setAuthLoading(false);
+                    return;
+                }
+
+                if (!cleanEmail.includes('@')) {
+                    setAuthError('Please enter a valid email address.');
                     setAuthLoading(false);
                     return;
                 }
@@ -1075,9 +1083,8 @@
                         return;
                     }
                     
-                    // Create Firebase Auth user
-                    const email = cleanUsername.includes('@') ? cleanUsername : `${cleanUsername}@cos201.com`;
-                    const userCredential = await firebase.auth().createUserWithEmailAndPassword(email, cleanPassword);
+                    // Create Firebase Auth user with real Email
+                    const userCredential = await firebase.auth().createUserWithEmailAndPassword(cleanEmail, cleanPassword);
                     const firebaseUser = userCredential.user;
                     
                     // Update auth profile
@@ -1090,7 +1097,7 @@
                         uid: firebaseUser.uid,
                         username: cleanUsername,
                         displayName: cleanDisplayName,
-                        email: firebaseUser.email,
+                        email: cleanEmail,
                         onLeaderboard: authOnLeaderboard,
                         createdAt: new Date().toISOString()
                     };
@@ -1105,6 +1112,7 @@
                     
                     setScreen('dashboard');
                     setAuthUsername('');
+                    setAuthEmail('');
                     setAuthPassword('');
                     setAuthDisplayName('');
                 } catch (err) {
@@ -1120,19 +1128,24 @@
                 setAuthError('');
                 setAuthLoading(true);
                 
-                const cleanUsername = authUsername.trim().toLowerCase();
+                const cleanEmail = authEmail.trim().toLowerCase();
                 const cleanPassword = authPassword;
                 
-                if (!cleanUsername || !cleanPassword) {
+                if (!cleanEmail || !cleanPassword) {
                     setAuthError('Please fill in all fields.');
+                    setAuthLoading(false);
+                    return;
+                }
+
+                if (!cleanEmail.includes('@')) {
+                    setAuthError('Please enter a valid email address.');
                     setAuthLoading(false);
                     return;
                 }
                 
                 try {
-                    // Log in using Firebase Auth
-                    const email = cleanUsername.includes('@') ? cleanUsername : `${cleanUsername}@cos201.com`;
-                    const userCredential = await firebase.auth().signInWithEmailAndPassword(email, cleanPassword);
+                    // Log in using Firebase Auth with real Email
+                    const userCredential = await firebase.auth().signInWithEmailAndPassword(cleanEmail, cleanPassword);
                     const firebaseUser = userCredential.user;
                     
                     // Retrieve user profile document from Firestore
@@ -1146,8 +1159,9 @@
                         // Create profile if missing
                         profileData = {
                             uid: firebaseUser.uid,
-                            username: firebaseUser.email ? firebaseUser.email.split('@')[0] : cleanUsername,
-                            displayName: firebaseUser.displayName || firebaseUser.email ? firebaseUser.email.split('@')[0] : 'User',
+                            username: firebaseUser.email ? firebaseUser.email.split('@')[0] : cleanEmail.split('@')[0],
+                            displayName: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'User'),
+                            email: cleanEmail,
                             onLeaderboard: true,
                             createdAt: new Date().toISOString()
                         };
@@ -1162,10 +1176,11 @@
                     
                     setScreen('dashboard');
                     setAuthUsername('');
+                    setAuthEmail('');
                     setAuthPassword('');
                 } catch (err) {
                     console.error("Login error:", err);
-                    setAuthError(err.message || 'Invalid username or password.');
+                    setAuthError(err.message || 'Invalid email or password.');
                 } finally {
                     setAuthLoading(false);
                 }
@@ -1379,11 +1394,11 @@
                                 </form>
                             )}
 
-                            {authTab === 'login' && (
+                             {authTab === 'login' && (
                                 <form onSubmit={handleLogin} className="space-y-4 text-left">
                                     <div>
-                                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Username</label>
-                                        <input type="text" placeholder="e.g. joshua_dev" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#004493] outline-none transition-all" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} required />
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Email Address</label>
+                                        <input type="email" placeholder="e.g. scholar@example.com" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#004493] outline-none transition-all" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} required />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Password</label>
@@ -1410,12 +1425,12 @@
                             {authTab === 'register' && (
                                 <form onSubmit={handleRegister} className="space-y-4 text-left">
                                     <div>
-                                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Choose Username</label>
-                                        <input type="text" placeholder="e.g. joshua_dev" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#004493] outline-none transition-all" value={authUsername} onChange={(e) => setAuthUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))} required />
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Email Address</label>
+                                        <input type="email" placeholder="e.g. scholar@example.com" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#004493] outline-none transition-all" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} required />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Full Name</label>
-                                        <input type="text" placeholder="e.g. Joshua Adesina" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#004493] outline-none transition-all" value={authDisplayName} onChange={(e) => setAuthDisplayName(e.target.value)} required />
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Choose Username</label>
+                                        <input type="text" placeholder="e.g. joshua_dev" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#004493] outline-none transition-all" value={authUsername} onChange={(e) => setAuthUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))} required />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Password</label>
