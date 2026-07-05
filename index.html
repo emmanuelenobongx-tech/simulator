@@ -71,6 +71,7 @@
     <!-- React and Babel -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script>window.react = window.React;</script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <!-- Framer Motion and Lucide -->
@@ -1278,6 +1279,26 @@
                 setShowConfirmModal(false);
             }, [startTime, currentQuestions, userAnswers, history, selectedCourse, selectedDifficulty, user, userProfile, authOnLeaderboard, guestOnLeaderboard, userName]);
 
+            const handleToggleLeaderboard = useCallback(async () => {
+                if (!lastAttempt) return;
+                const newValue = !lastAttempt.onLeaderboard;
+                
+                const updatedAttempt = { ...lastAttempt, onLeaderboard: newValue };
+                setLastAttempt(updatedAttempt);
+
+                const updatedHistory = history.map(h => h.id === lastAttempt.id ? updatedAttempt : h);
+                setHistory(updatedHistory);
+                localStorage.setItem('cos201_history', JSON.stringify(updatedHistory));
+
+                try {
+                    await db.collection('attempts').doc(lastAttempt.id).update({
+                        onLeaderboard: newValue
+                    });
+                } catch (err) {
+                    console.error("Error updating leaderboard preference in DB:", err);
+                }
+            }, [lastAttempt, history]);
+
             useEffect(() => {
                 let timer;
                 if (screen === 'exam' && !isUnlimited) {
@@ -1897,7 +1918,44 @@
                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
                                 <div className="lg:col-span-8 bento-card bg-slate-50 border-none flex flex-col md:flex-row items-center gap-12 p-12">
                                     <div className="relative"><svg className="w-48 h-48 transform -rotate-90"><circle cx="96" cy="96" r="88" fill="none" stroke="currentColor" strokeWidth="12" className="text-slate-200" /><motion.circle cx="96" cy="96" r="88" fill="none" stroke="currentColor" strokeWidth="12" strokeDasharray={552.92} initial={{ strokeDashoffset: 552.92 }} animate={{ strokeDashoffset: 552.92 - (552.92 * lastAttempt.score) / 100 }} transition={{ duration: 1.5, ease: "easeOut" }} className="text-[#004493]" /></svg><div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-5xl font-bold">{lastAttempt.score}%</span><span className="text-xs font-bold uppercase tracking-widest opacity-40">Final Score</span></div></div>
-                                    <div className="flex-grow text-center md:text-left"><div className="mb-4"><Badge score={lastAttempt.score} /></div><h2 className="text-3xl font-bold mb-4">Performance Insights</h2><p className="text-[#424654] mb-6">{lastAttempt.score >= 70 ? "Excellent mastery!" : lastAttempt.score >= 40 ? "Solid understanding." : "Focus on the basics."}</p><div className="grid grid-cols-3 gap-6"><div><div className="text-2xl font-bold text-green-600">{lastAttempt.correct}</div><div className="text-xs font-bold opacity-40 uppercase tracking-widest">Correct</div></div><div><div className="text-2xl font-bold text-red-500">{lastAttempt.incorrect}</div><div className="text-xs font-bold opacity-40 uppercase tracking-widest">Incorrect</div></div><div><div className="text-2xl font-bold text-[#004493]">{lastAttempt.timeTaken}</div><div className="text-xs font-bold opacity-40 uppercase tracking-widest">Time</div></div></div></div>
+                                    <div className="flex-grow text-center md:text-left">
+                                        <div className="mb-4"><Badge score={lastAttempt.score} /></div>
+                                        <h2 className="text-3xl font-bold mb-4">Performance Insights</h2>
+                                        <p className="text-[#424654] mb-6">{lastAttempt.score >= 70 ? "Excellent mastery!" : lastAttempt.score >= 40 ? "Solid understanding." : "Focus on the basics."}</p>
+                                        <div className="grid grid-cols-3 gap-6">
+                                            <div><div className="text-2xl font-bold text-green-600">{lastAttempt.correct}</div><div className="text-xs font-bold opacity-40 uppercase tracking-widest">Correct</div></div>
+                                            <div><div className="text-2xl font-bold text-red-500">{lastAttempt.incorrect}</div><div className="text-xs font-bold opacity-40 uppercase tracking-widest">Incorrect</div></div>
+                                            <div><div className="text-2xl font-bold text-[#004493]">{lastAttempt.timeTaken}</div><div className="text-xs font-bold opacity-40 uppercase tracking-widest">Time</div></div>
+                                        </div>
+                                        <div className="mt-6 pt-6 border-t border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                            <div>
+                                                <h4 className="font-bold text-slate-800 flex items-center gap-2 justify-center md:justify-start">
+                                                    <Trophy size={16} className="text-[#004493]" /> Publish to Leaderboard
+                                                </h4>
+                                                <p className="text-xs text-slate-500 mt-1">
+                                                    Toggle visibility on the global simulation leaderboard.
+                                                </p>
+                                            </div>
+                                            <button 
+                                                onClick={handleToggleLeaderboard}
+                                                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                                                    lastAttempt.onLeaderboard 
+                                                    ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                                                    : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                                                }`}
+                                            >
+                                                {lastAttempt.onLeaderboard ? (
+                                                    <>
+                                                        <CheckCircle2 size={14} className="text-green-600" /> Publicly Visible
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <XCircle size={14} className="text-slate-500" /> Hidden / Private
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div className="lg:col-span-4 bento-card bg-[#004493] text-white flex flex-col justify-center p-10"><h3 className="text-xl font-bold mb-4">Mastery Breakdown</h3><div className="space-y-4"><div className="flex justify-between items-center"><span className="opacity-70">Accuracy</span><span className="font-bold">{lastAttempt.score}%</span></div><div className="w-full h-2 bg-white/20 rounded-full overflow-hidden"><div className="h-full bg-white" style={{ width: `${lastAttempt.score}%` }} /></div><div className="flex justify-between items-center pt-4"><span className="opacity-70">Completion</span><span className="font-bold">100%</span></div><div className="w-full h-2 bg-white/20 rounded-full overflow-hidden"><div className="h-full bg-white" style={{ width: '100%' }} /></div></div></div>
                             </div>
