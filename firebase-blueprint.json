@@ -1,0 +1,46 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile with leaderboard preference and username mapping",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth User ID" },
+        "username": { "type": "string", "description": "Unique username used for login" },
+        "displayName": { "type": "string", "description": "Display name of the user" },
+        "onLeaderboard": { "type": "boolean", "description": "Whether the user wants to be on the public leaderboard" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp" }
+      },
+      "required": ["uid", "username", "displayName", "onLeaderboard", "createdAt"]
+    },
+    "Attempt": {
+      "title": "Exam Attempt",
+      "description": "Result of a completed exam simulation",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "User ID of the student, or 'anonymous' for guests" },
+        "userName": { "type": "string", "description": "Name of the student" },
+        "score": { "type": "integer", "description": "Percentage score achieved (0-100)" },
+        "correct": { "type": "integer", "description": "Number of correct answers" },
+        "incorrect": { "type": "integer", "description": "Number of incorrect answers" },
+        "total": { "type": "integer", "description": "Total number of questions in the exam" },
+        "timeTaken": { "type": "string", "description": "Formatted time taken string" },
+        "course": { "type": "string", "description": "Course identifier (e.g., 'cos201' or 'gst212')" },
+        "difficulty": { "type": "string", "description": "Cognitive difficulty tier" },
+        "onLeaderboard": { "type": "boolean", "description": "Whether this score should be listed on the public leaderboard" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Attempt completion timestamp" }
+      },
+      "required": ["userId", "userName", "score", "correct", "incorrect", "total", "timeTaken", "course", "onLeaderboard", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Profiles of registered users"
+    },
+    "attempts/{attemptId}": {
+      "schema": "Attempt",
+      "description": "Saved exam attempts"
+    }
+  }
+}

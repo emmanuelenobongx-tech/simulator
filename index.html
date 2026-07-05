@@ -1,0 +1,1948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COS201 Exam Simulator</title>
+    
+    <!-- Tailwind CSS 3.4.1 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+                        display: ["Space Grotesk", "sans-serif"],
+                    },
+                    colors: {
+                        primary: "#004493",
+                        "primary-container": "#005bc0",
+                        surface: "#f7f9fb",
+                        "on-surface": "#191c1e",
+                        "on-surface-variant": "#424654",
+                    },
+                },
+            },
+        }
+    </script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style type="text/tailwindcss">
+        @layer base {
+            body {
+                @apply bg-surface text-on-surface font-sans antialiased min-h-screen;
+                background-image: radial-gradient(circle at 2px 2px, rgba(0,68,147,0.05) 1px, transparent 0);
+                background-size: 40px 40px;
+            }
+            h1, h2, h3, h4, h5, h6 {
+                @apply font-display text-slate-900;
+            }
+        }
+
+        @layer components {
+            .glass {
+                @apply bg-white/80 backdrop-blur-md border-b border-slate-200/50 shadow-sm;
+            }
+            .bento-card {
+                @apply bg-white rounded-3xl p-8 shadow-[0_8px_40px_rgb(0,0,0,0.04)] border border-slate-100 transition-all duration-500 hover:shadow-[0_20px_60px_rgb(0,0,0,0.08)] hover:-translate-y-1;
+            }
+            .btn-primary {
+                @apply bg-gradient-to-br from-primary to-primary-container text-white px-8 py-4 rounded-2xl font-bold shadow-xl shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-3 hover:brightness-110;
+            }
+            .stat-card {
+                @apply bento-card flex flex-col justify-between;
+            }
+        }
+
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background: white !important; }
+        }
+        .print-only { display: none; }
+    </style>
+
+    <!-- React and Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Framer Motion and Lucide -->
+    <script src="https://cdn.jsdelivr.net/npm/framer-motion@10.16.4/dist/framer-motion.js"></script>
+    <script src="https://unpkg.com/lucide-react@latest/dist/umd/lucide-react.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Hidden form for Netlify discovery -->
+    <form name="exam-submissions" action="/" netlify="true" data-netlify="true" netlify-honeypot="bot-field" style="display: none;">
+        <input type="hidden" name="form-name" value="exam-submissions" />
+        <label>Bot field: <input type="text" name="bot-field" /></label>
+        <label>Name: <input type="text" name="name" /></label>
+        <label>Score: <input type="text" name="score" /></label>
+        <label>Correct: <input type="text" name="correct" /></label>
+        <label>Incorrect: <input type="text" name="incorrect" /></label>
+        <label>Time Taken: <input type="text" name="time_taken" /></label>
+        <label>Printed: <input type="text" name="printed" /></label>
+    </form>
+
+    <!-- Firebase SDK Compat -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+    <script src="./gst212_questions.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useCallback } = React;
+        
+        // Robust fallback for Framer Motion
+        const MotionGlobal = window.Motion || {};
+        const motion = MotionGlobal.motion || new Proxy({}, {
+            get: () => ({ children }) => <div>{children}</div>
+        });
+        const AnimatePresence = MotionGlobal.AnimatePresence || (({ children }) => <>{children}</>);
+
+        // --- Questions Data ---
+        const COS201_QUESTIONS = [
+            {
+                id: 1,
+                text: "An algorithm is best defined as:",
+                options: [
+                    "A type of programming language",
+                    "A finite sequence of well-defined steps for solving a problem",
+                    "A computer hardware component",
+                    "A method of storing data"
+                ],
+                correctAnswer: "A finite sequence of well-defined steps for solving a problem",
+                section: "Algorithms"
+            },
+            {
+                id: 2,
+                text: "Which characteristic ensures that every step of an algorithm can be executed in a finite amount of time?",
+                options: ["Efficiency", "Finiteness", "Definiteness", "Effectiveness"],
+                correctAnswer: "Effectiveness",
+                section: "Algorithms"
+            },
+            {
+                id: 3,
+                text: "An algorithm must terminate after a finite number of steps. This property is called:",
+                options: ["Definiteness", "Effectiveness", "Finiteness", "Input"],
+                correctAnswer: "Finiteness",
+                section: "Algorithms"
+            },
+            {
+                id: 4,
+                text: "Which property of an algorithm requires it to minimize the use of resources such as time and memory?",
+                options: ["Finiteness", "Effectiveness", "Efficiency", "Definiteness"],
+                correctAnswer: "Efficiency",
+                section: "Algorithms"
+            },
+            {
+                id: 5,
+                text: "How many methods of representing an algorithm are stated in the course material?",
+                options: ["Two", "Three", "Four", "Five"],
+                correctAnswer: "Three",
+                section: "Algorithms"
+            },
+            {
+                id: 6,
+                text: "Which method of algorithm representation uses sequential English words to describe each step?",
+                options: ["Decision table", "Flowchart", "Pseudo code", "Source code"],
+                correctAnswer: "Pseudo code",
+                section: "Algorithms"
+            },
+            {
+                id: 7,
+                text: "Pseudo code is described as which type of language?",
+                options: ["Formal and standardized", "Informal and artificial", "Machine-level", "Compiled"],
+                correctAnswer: "Informal and artificial",
+                section: "Algorithms"
+            },
+            {
+                id: 8,
+                text: "A flowchart represents an algorithm using:",
+                options: ["English sentences only", "Tables of conditions and actions", "Standard graphical symbols", "Mathematical equations"],
+                correctAnswer: "Standard graphical symbols",
+                section: "Algorithms"
+            },
+            {
+                id: 9,
+                text: "In a flowchart, each step is linked to the next using:",
+                options: ["Numbered lists", "Directional arrows", "Colour codes", "Dotted lines"],
+                correctAnswer: "Directional arrows",
+                section: "Algorithms"
+            },
+            {
+                id: 10,
+                text: "Which flowchart symbol is used to represent a process or computation?",
+                options: ["Diamond", "Oval", "Parallelogram", "Rectangle"],
+                correctAnswer: "Rectangle",
+                section: "Algorithms"
+            },
+            {
+                id: 11,
+                text: "Which flowchart symbol is used for input or output operations?",
+                options: ["Rectangle", "Diamond", "Parallelogram", "Oval"],
+                correctAnswer: "Parallelogram",
+                section: "Algorithms"
+            },
+            {
+                id: 12,
+                text: "Which flowchart symbol marks the beginning or end of a process?",
+                options: ["Rectangle", "Diamond", "Circle", "Oval/Rounded rectangle"],
+                correctAnswer: "Oval/Rounded rectangle",
+                section: "Algorithms"
+            },
+            {
+                id: 13,
+                text: "The diamond shape in a flowchart is used to represent:",
+                options: ["A process step", "A decision", "Input/Output", "Start/Stop"],
+                correctAnswer: "A decision",
+                section: "Algorithms"
+            },
+            {
+                id: 14,
+                text: "A decision table structures the logic of a problem into which form?",
+                options: ["Flowchart symbols", "Sequential English steps", "YES and NO form", "Binary code"],
+                correctAnswer: "YES and NO form",
+                section: "Algorithms"
+            },
+            {
+                id: 15,
+                text: "A decision table is divided into four sections called:",
+                options: ["Columns", "Rows", "Quadrants", "Segments"],
+                correctAnswer: "Quadrants",
+                section: "Algorithms"
+            },
+            {
+                id: 16,
+                text: "Which component of a decision table lists all the conditions?",
+                options: ["Action Stubs", "Rules", "Legend", "Condition Stubs"],
+                correctAnswer: "Condition Stubs",
+                section: "Algorithms"
+            },
+            {
+                id: 17,
+                text: "Which component of a decision table lists all possible outcomes or actions?",
+                options: ["Condition Stubs", "Action Stubs", "Legend", "Rules"],
+                correctAnswer: "Action Stubs",
+                section: "Algorithms"
+            },
+            {
+                id: 18,
+                text: "In a decision table, the 'Legend' is used to:",
+                options: ["List all conditions", "Define the actions", "Clarify the meaning of symbols or codes used", "Specify which conditions trigger which actions"],
+                correctAnswer: "Clarify the meaning of symbols or codes used",
+                section: "Algorithms"
+            },
+            {
+                id: 19,
+                text: "Which of the following is an advantage of using a flowchart?",
+                options: ["It can be typed easily", "It serves as documentation when programmers forget program logic", "It is always simple regardless of problem complexity", "It requires no redrawing when logic changes"],
+                correctAnswer: "It serves as documentation when programmers forget program logic",
+                section: "Algorithms"
+            },
+            {
+                id: 20,
+                text: "Which of the following is a disadvantage of a flowchart?",
+                options: ["It aids communication", "It helps analysis", "Alterations may require complete redrawing", "It is easy to understand"],
+                correctAnswer: "Alterations may require complete redrawing",
+                section: "Algorithms"
+            },
+            {
+                id: 21,
+                text: "Flowcharts are useful because they allow programmers to examine:",
+                options: ["Only happy-path outcomes", "All possible logical outcomes in a process", "Hardware performance", "Network topology"],
+                correctAnswer: "All possible logical outcomes in a process",
+                section: "Algorithms"
+            },
+            {
+                id: 22,
+                text: "Which statement is TRUE about pseudo code?",
+                options: ["It uses standard flowchart symbols", "It is a formal compiled language", "It does not use standard symbols like a flowchart", "It cannot represent decisions"],
+                correctAnswer: "It does not use standard symbols like a flowchart",
+                section: "Algorithms"
+            },
+            {
+                id: 23,
+                text: "Decision tables are used in which of the following fields?",
+                options: ["Music production and film editing", "Software testing and business rules management", "Agriculture and farming", "Construction and architecture"],
+                correctAnswer: "Software testing and business rules management",
+                section: "Algorithms"
+            },
+            {
+                id: 24,
+                text: "An algorithm's 'Input and Output' characteristic means:",
+                options: ["It only takes one input", "It takes inputs and produces outputs from computation", "It produces no output", "Output is always a number"],
+                correctAnswer: "It takes inputs and produces outputs from computation",
+                section: "Algorithms"
+            },
+            {
+                id: 25,
+                text: "Which property ensures an algorithm produces the correct output for a given input within reasonable time?",
+                options: ["Finiteness", "Efficiency", "Effectiveness", "Definiteness"],
+                correctAnswer: "Effectiveness",
+                section: "Algorithms"
+            },
+            {
+                id: 26,
+                text: "Why is reproduction of flowcharts often considered a problem?",
+                options: ["They are too colourful", "They require special paper", "Their symbols cannot be typed", "They are too short"],
+                correctAnswer: "Their symbols cannot be typed",
+                section: "Algorithms"
+            },
+            {
+                id: 27,
+                text: "What does the 'Stepwise Procedure' characteristic of an algorithm mean?",
+                options: ["Steps can be in any order", "Steps are a well-defined sequence that must be followed", "Only one step is needed", "Steps are hidden from the programmer"],
+                correctAnswer: "Steps are a well-defined sequence that must be followed",
+                section: "Algorithms"
+            },
+            {
+                id: 28,
+                text: "A decision table can have conditions with how many possible states?",
+                options: ["Exactly one", "Exactly two", "Two or more", "Unlimited and unspecified"],
+                correctAnswer: "Two or more",
+                section: "Algorithms"
+            },
+            {
+                id: 29,
+                text: "Flowcharts help in clarifying the logic of a system. This is referred to as which advantage?",
+                options: ["Communication", "Documentation", "Analysis", "Reproduction"],
+                correctAnswer: "Analysis",
+                section: "Algorithms"
+            },
+            {
+                id: 30,
+                text: "Which of the following best describes the relationship between algorithm steps and flowchart symbols?",
+                options: ["Algorithm steps determine which symbol to use to represent each step", "Flowchart symbols determine what the algorithm does", "They have no relationship", "Only the decision symbol is used for all steps"],
+                correctAnswer: "Algorithm steps determine which symbol to use to represent each step",
+                section: "Algorithms"
+            },
+            {
+                id: 31,
+                text: "Which of the following accurately defines computer programming?",
+                options: ["Only writing code", "Writing, testing, debugging and maintaining instructions for solving a problem", "Designing hardware", "Managing computer networks"],
+                correctAnswer: "Writing, testing, debugging and maintaining instructions for solving a problem",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 32,
+                text: "Source code must be written in:",
+                options: ["Plain English only", "An acceptable computer programming language", "Machine code only", "Binary digits only"],
+                correctAnswer: "An acceptable computer programming language",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 33,
+                text: "What is the main purpose of creating a computer program?",
+                options: ["To make computers faster", "To create a program that exhibits a certain described behaviour", "To replace human workers entirely", "To store data permanently"],
+                correctAnswer: "To create a program that exhibits a certain described behaviour",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 34,
+                text: "Programming involves converting human thoughts and solutions into:",
+                options: ["Physical hardware", "Network protocols", "Machine-executable format", "Database records"],
+                correctAnswer: "Machine-executable format",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 35,
+                text: "Which of the following skills does programming help develop?",
+                options: ["Emotional intelligence only", "Analytical and logical thinking", "Artistic creativity only", "Physical coordination"],
+                correctAnswer: "Analytical and logical thinking",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 36,
+                text: "What does 'Automation' in programming primarily achieve?",
+                options: ["Increases manual workload", "Automates repetitive tasks freeing time for complex work", "Eliminating the need for programmers", "Slows down operations for safety"],
+                correctAnswer: "Automates repetitive tasks freeing time for complex work",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 37,
+                text: "Modeling and simulation through programming enables:",
+                options: ["Physical construction of models", "Testing hypotheses without real-world risks or constraints", "Replacing mathematical analysis", "Building hardware prototypes"],
+                correctAnswer: "Testing hypotheses without real-world risks or constraints",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 38,
+                text: "Data manipulation and analysis in programming is crucial for:",
+                options: ["Deleting unnecessary data", "Identifying patterns, trends and insights", "Encrypting all data", "Printing reports only"],
+                correctAnswer: "Identifying patterns, trends and insights",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 39,
+                text: "Rapid prototyping in programming refers to:",
+                options: ["Building physical prototypes quickly", "Iterative development and testing of solutions with quick feedback", "Writing final production code without testing", "Skipping the design phase"],
+                correctAnswer: "Iterative development and testing of solutions with quick feedback",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 40,
+                text: "Well-designed programs that can handle larger or more complex problems demonstrate which quality?",
+                options: ["Rigidity", "Scalability and Adaptability", "Simplicity only", "Inflexibility"],
+                correctAnswer: "Scalability and Adaptability",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 41,
+                text: "What is the first step in the Problem-Solving Process?",
+                options: ["Solution Design", "Implementation", "Problem Identification", "Problem Analysis"],
+                correctAnswer: "Problem Identification",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 42,
+                text: "Problem Identification involves which of the following activities?",
+                options: ["Writing the actual code", "Identifying inputs, required outputs and determining constraints", "Creating algorithms", "Testing and debugging"],
+                correctAnswer: "Identifying inputs, required outputs and determining constraints",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 43,
+                text: "Breaking down complex problems into smaller parts occurs in which phase?",
+                options: ["Implementation", "Problem Identification", "Solution Design", "Problem Analysis"],
+                correctAnswer: "Problem Analysis",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 44,
+                text: "Identifying patterns and relationships in a problem is part of:",
+                options: ["Implementation", "Problem Analysis", "Solution Design", "Testing"],
+                correctAnswer: "Problem Analysis",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 45,
+                text: "Determining necessary resources is a task in which phase?",
+                options: ["Problem Identification", "Solution Design", "Problem Analysis", "Implementation"],
+                correctAnswer: "Problem Analysis",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 46,
+                text: "Creating algorithms to solve a problem belongs to which phase?",
+                options: ["Problem Identification", "Problem Analysis", "Implementation", "Solution Design"],
+                correctAnswer: "Solution Design",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 47,
+                text: "Planning data structures is a task in which phase of the Problem-Solving Process?",
+                options: ["Problem Analysis", "Solution Design", "Problem Identification", "Testing"],
+                correctAnswer: "Solution Design",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 48,
+                text: "Designing user interfaces (if needed) occurs in which phase?",
+                options: ["Implementation", "Problem Identification", "Problem Analysis", "Solution Design"],
+                correctAnswer: "Solution Design",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 49,
+                text: "Writing the actual code takes place in which phase?",
+                options: ["Solution Design", "Problem Analysis", "Implementation", "Problem Identification"],
+                correctAnswer: "Implementation",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 50,
+                text: "Optimizing performance is a task that belongs to which phase?",
+                options: ["Problem Identification", "Problem Analysis", "Solution Design", "Implementation"],
+                correctAnswer: "Implementation",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 51,
+                text: "Which phase comes immediately after Problem Analysis in the Problem-Solving Process?",
+                options: ["Implementation", "Problem Identification", "Solution Design", "Testing only"],
+                correctAnswer: "Solution Design",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 52,
+                text: "Which of the following correctly describes what a programmer does?",
+                options: ["Repairs computer hardware", "Designs, creates and tests computer programs", "Manages computer networks exclusively", "Installs operating systems only"],
+                correctAnswer: "Designs, creates and tests computer programs",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 53,
+                text: "Programming is described as versatile because:",
+                options: ["It is used in only one industry", "It requires no prior knowledge", "It is employed across many industries and fields", "It is easy to learn without training"],
+                correctAnswer: "It is employed across many industries and fields",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 54,
+                text: "Which of the following is NOT listed as a key way programming contributes to problem-solving?",
+                options: ["Algorithmic Thinking", "Automation", "Hardware Repair", "Rapid Prototyping"],
+                correctAnswer: "Hardware Repair",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 55,
+                text: "What does 'Collaboration and Communication' as a programming benefit mean?",
+                options: ["Programmers work alone always", "Working with teams fosters sharing of diverse perspectives", "Only one programmer can solve a problem", "Communication replaces coding"],
+                correctAnswer: "Working with teams fosters sharing of diverse perspectives",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 56,
+                text: "Which of the following best describes the role of programming in modern technology?",
+                options: ["It is only used in web development", "It is the backbone of contemporary technology", "It is being replaced by manual processes", "It is limited to desktop applications"],
+                correctAnswer: "It is the backbone of contemporary technology",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 57,
+                text: "Testing and debugging is a task carried out in which phase?",
+                options: ["Problem Identification", "Problem Analysis", "Solution Design", "Implementation"],
+                correctAnswer: "Implementation",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 58,
+                text: "What does 'Determining constraints and requirements' mean in Problem Identification?",
+                options: ["Writing the code", "Defining limitations within which the solution must work", "Creating algorithms", "Testing the solution"],
+                correctAnswer: "Defining limitations within which the solution must work",
+                section: "Introduction to Computer Programming"
+            },
+            {
+                id: 201,
+                text: "A programming paradigm is best described as:",
+                options: ["A specific coding technique", "A broad style or philosophy of structuring and organizing code", "A type of data structure", "A debugging tool"],
+                correctAnswer: "A broad style or philosophy of structuring and organizing code",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 202,
+                text: "A programming technique is best described as:",
+                options: ["The overall philosophy of coding", "A specific method or practice used within a paradigm", "A programming language", "A hardware instruction set"],
+                correctAnswer: "A specific method or practice used within a paradigm",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 203,
+                text: "Which statement correctly distinguishes a paradigm from a technique?",
+                options: ["They are identical concepts", "A paradigm is the big picture; a technique is a tool within it", "Techniques are broader than paradigms", "Paradigms are only for advanced programmers"],
+                correctAnswer: "A paradigm is the big picture; a technique is a tool within it",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 204,
+                text: "Which programming style is characterized by giving explicit, step-by-step instructions that change the program's state?",
+                options: ["Declarative", "Functional", "Imperative", "Event-driven"],
+                correctAnswer: "Imperative",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 205,
+                text: "Sequential execution, explicit control flow and mutable state are characteristics of which paradigm?",
+                options: ["Functional", "Declarative", "OOP", "Imperative"],
+                correctAnswer: "Imperative",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 206,
+                text: "Declarative programming focuses on describing:",
+                options: ["How to perform a task step by step", "What should be done, letting the system determine the steps", "Events and callbacks", "Object interactions"],
+                correctAnswer: "What should be done, letting the system determine the steps",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 207,
+                text: "Which of the following is a characteristic of Declarative Programming?",
+                options: ["Mutable state", "Explicit control flow", "Focus on desired outcome", "Event listeners"],
+                correctAnswer: "Focus on desired outcome",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 208,
+                text: "Procedural programming is a structured form of which other paradigm?",
+                options: ["Functional", "Declarative", "OOP", "Imperative"],
+                correctAnswer: "Imperative",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 209,
+                text: "Which is a key characteristic of Procedural Programming?",
+                options: ["Immutable data", "Use of reusable procedures or functions", "Event listeners", "Pure functions"],
+                correctAnswer: "Use of reusable procedures or functions",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 210,
+                text: "Event-driven programming is based on the concept of:",
+                options: ["Step-by-step computation", "Describing what to do", "Responding to events such as user actions", "Immutable data processing"],
+                correctAnswer: "Responding to events such as user actions",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 211,
+                text: "Which features are associated with Event-Driven Programming?",
+                options: ["Pure functions and immutability", "Event listeners, callbacks and non-blocking execution", "Mutable state and loops", "Classes and objects only"],
+                correctAnswer: "Event listeners, callbacks and non-blocking execution",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 212,
+                text: "OOP organizes programs around:",
+                options: ["Sequential instructions", "Mathematical functions", "Events and callbacks", "Objects containing both data and behavior"],
+                correctAnswer: "Objects containing both data and behavior",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 213,
+                text: "Which of the following correctly lists the Four Pillars of OOP?",
+                options: ["Loops, Functions, Variables, Arrays", "Encapsulation, Inheritance, Polymorphism, Abstraction", "Input, Process, Output, Storage", "Design, Code, Test, Deploy"],
+                correctAnswer: "Encapsulation, Inheritance, Polymorphism, Abstraction",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 214,
+                text: "Functional programming treats computation as:",
+                options: ["A series of object interactions", "The evaluation of mathematical functions", "A sequence of events", "A set of procedures"],
+                correctAnswer: "The evaluation of mathematical functions",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 215,
+                text: "What does 'Immutability' mean in Functional Programming?",
+                options: ["Data changes frequently", "Data cannot change after creation", "Functions are mutable", "Variables can be reassigned freely"],
+                correctAnswer: "Data cannot change after creation",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 216,
+                text: "Functions that take other functions as arguments or return functions are called:",
+                options: ["Pure functions", "Recursive functions", "Higher-Order Functions", "Abstract functions"],
+                correctAnswer: "Higher-Order Functions",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 217,
+                text: "In Functional Programming, functions that call themselves instead of using loops are called:",
+                options: ["Higher-Order Functions", "Pure Functions", "Recursive Functions", "Callback Functions"],
+                correctAnswer: "Recursive Functions",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 218,
+                text: "A pure function is defined as one where:",
+                options: ["It has side effects", "It modifies global variables", "The same input always produces the same output", "It uses loops only"],
+                correctAnswer: "The same input always produces the same output",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 219,
+                text: "When should Declarative Programming NOT be used?",
+                options: ["Database queries", "UI layout", "Low-level hardware control", "Configuration systems"],
+                correctAnswer: "Low-level hardware control",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 220,
+                text: "Imperative programming is most suitable for:",
+                options: ["Large systems with complex interactions", "Projects requiring high modularity", "Small scripts and situations requiring precise control", "Database query systems"],
+                correctAnswer: "Small scripts and situations requiring precise control",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 221,
+                text: "OOP is NOT recommended for:",
+                options: ["Large enterprise systems", "Banking software", "Games", "Very small scripts"],
+                correctAnswer: "Very small scripts",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 222,
+                text: "Functional Programming is best suited for:",
+                options: ["Systems heavily dependent on state changes", "Data processing pipelines and financial calculations", "GUI applications with many user interactions", "Systems requiring frequent mutable state"],
+                correctAnswer: "Data processing pipelines and financial calculations",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 223,
+                text: "Which programming paradigm is best for web applications, mobile apps and GUI systems?",
+                options: ["Procedural", "Functional", "Event-driven", "Declarative"],
+                correctAnswer: "Event-driven",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 224,
+                text: "Procedural programming is best suited for:",
+                options: ["Highly complex object modelling systems", "Small to medium applications and structured scripts", "Systems requiring dynamic behaviour modelling", "Large-scale enterprise systems only"],
+                correctAnswer: "Small to medium applications and structured scripts",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 225,
+                text: "Which of the following correctly describes a Multi-Paradigm Language?",
+                options: ["A language limited to one paradigm", "A language supporting multiple paradigms", "A language that only supports OOP", "A language that only supports functional programming"],
+                correctAnswer: "A language supporting multiple paradigms",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 226,
+                text: "In a typical web application architecture, the backend uses which paradigm?",
+                options: ["Declarative", "Event-driven", "Object-Oriented", "Functional only"],
+                correctAnswer: "Object-Oriented",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 227,
+                text: "In a typical web application architecture, the database layer uses which paradigm?",
+                options: ["Functional", "Imperative", "Declarative (SQL)", "Event-driven"],
+                correctAnswer: "Declarative (SQL)",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 228,
+                text: "The frontend of a web application typically combines which paradigms?",
+                options: ["OOP and Declarative only", "Event-driven and Functional", "Assembly and Procedural", "Functional only"],
+                correctAnswer: "Event-driven and Functional",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 229,
+                text: "Understanding programming paradigms helps programmers to:",
+                options: ["Write longer and more complex code", "Avoid modularity", "Improve problem-solving and code organization", "Limit their approach to one paradigm"],
+                correctAnswer: "Improve problem-solving and code organization",
+                section: "Programming Paradigms"
+            },
+            {
+                id: 230,
+                text: "No single paradigm is universally superior because effectiveness depends on:",
+                options: ["The programmer's preference alone", "The nature of the problem, complexity and requirements", "The country of development", "The age of the programming language"],
+                correctAnswer: "The nature of the problem, complexity and requirements",
+                section: "Programming Paradigms"
+            }
+        ];
+
+        // --- Firebase Configuration ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyD3yF3OlG2OjFTyE8tnID3yA9XaQq7MDRs",
+            authDomain: "design-arena-database.firebaseapp.com",
+            projectId: "design-arena-database",
+            storageBucket: "design-arena-database.firebasestorage.app",
+            messagingSenderId: "913207061756",
+            appId: "1:913207061756:web:fcba9f5316664fe71fbb79",
+            measurementId: "G-S1FFQSCEF7"
+        };
+        
+        // Initialize Firebase
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        // --- Icons ---
+        const Lucide = window.LucideReact || {};
+        const IconFallback = () => <div className="w-4 h-4 bg-slate-200 rounded" />;
+        const { 
+            BookOpen = IconFallback, 
+            Clock = IconFallback, 
+            History = IconFallback, 
+            Play = IconFallback, 
+            CheckCircle2 = IconFallback, 
+            XCircle = IconFallback, 
+            AlertCircle = IconFallback, 
+            Printer = IconFallback, 
+            LogOut = IconFallback, 
+            ChevronRight = IconFallback, 
+            ChevronLeft = IconFallback, 
+            Trophy = IconFallback, 
+            Target = IconFallback, 
+            Timer: TimerIcon = IconFallback, 
+            User = IconFallback, 
+            LayoutDashboard = IconFallback, 
+            GraduationCap = IconFallback,
+            Eye = IconFallback,
+            EyeOff = IconFallback
+        } = Lucide;
+
+        // --- Utilities ---
+        const shuffleArray = (array) => {
+            const newArray = [...array];
+            for (let i = newArray.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+            }
+            return newArray;
+        };
+
+        const formatTime = (seconds) => {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}m ${secs.toString().padStart(2, '0')}s`;
+        };
+
+        // --- Components ---
+        const Badge = ({ score }) => {
+            if (score >= 70) return (
+                <div className="flex items-center gap-2 px-4 py-2 bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-full font-bold">
+                    <Trophy size={18} /> Passed with Distinction
+                </div>
+            );
+            if (score >= 40) return (
+                <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-full font-bold">
+                    <CheckCircle2 size={18} /> Passed
+                </div>
+            );
+            return (
+                <div className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-700 border border-red-200 rounded-full font-bold">
+                    <XCircle size={18} /> Failed
+                </div>
+            );
+        };
+
+        function App() {
+            const [screen, setScreen] = useState('onboarding');
+            const [userName, setUserName] = useState('');
+            const [history, setHistory] = useState([]);
+            const [currentQuestions, setCurrentQuestions] = useState([]);
+            const [userAnswers, setUserAnswers] = useState({});
+            const [currentIndex, setCurrentIndex] = useState(0);
+            const [timeLeft, setTimeLeft] = useState(3600);
+            const [isUnlimited, setIsUnlimited] = useState(false);
+            const [startTime, setStartTime] = useState(0);
+            const [showConfirmModal, setShowConfirmModal] = useState(false);
+            const [lastAttempt, setLastAttempt] = useState(null);
+            const [selectedCourse, setSelectedCourse] = useState('cos201');
+            const [selectedDifficulty, setSelectedDifficulty] = useState('all');
+
+            // --- Firebase Auth & Database State ---
+            const [user, setUser] = useState(null);
+            const [userProfile, setUserProfile] = useState(null);
+            const [authTab, setAuthTab] = useState('guest'); // 'guest' | 'login' | 'register'
+            const [authUsername, setAuthUsername] = useState('');
+            const [authPassword, setAuthPassword] = useState('');
+            const [authDisplayName, setAuthDisplayName] = useState('');
+            const [authOnLeaderboard, setAuthOnLeaderboard] = useState(true);
+            const [authError, setAuthError] = useState('');
+            const [authLoading, setAuthLoading] = useState(false);
+            
+            // Guest-specific leaderboard state
+            const [guestOnLeaderboard, setGuestOnLeaderboard] = useState(() => {
+                const saved = localStorage.getItem('cos201_guest_on_leaderboard');
+                return saved !== null ? JSON.parse(saved) : false;
+            });
+
+            useEffect(() => {
+                localStorage.setItem('cos201_guest_on_leaderboard', JSON.stringify(guestOnLeaderboard));
+            }, [guestOnLeaderboard]);
+            
+            // Leaderboards state
+            const [leaderboard, setLeaderboard] = useState([]);
+            const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+            const [sidebarTab, setSidebarTab] = useState('history'); // 'history' | 'leaderboard'
+
+            // --- Firebase Auth & Custom Session Restoration ---
+            useEffect(() => {
+                setAuthLoading(true);
+                const unsubscribe = firebase.auth().onAuthStateChanged(async (firebaseUser) => {
+                    if (firebaseUser) {
+                        try {
+                            // Registered user is signed in
+                            const profileDoc = await db.collection('users').doc(firebaseUser.uid).get();
+                            if (profileDoc.exists) {
+                                const profileData = profileDoc.data();
+                                setUser(firebaseUser);
+                                setUserProfile(profileData);
+                                setUserName(profileData.displayName || profileData.username);
+                                localStorage.setItem('cos201_username', profileData.displayName || profileData.username);
+                                localStorage.setItem('cos201_logged_user', JSON.stringify({
+                                    uid: firebaseUser.uid,
+                                    email: firebaseUser.email,
+                                    ...profileData
+                                }));
+                            } else {
+                                // Fallback/default profile if firestore document doesn't exist yet
+                                const defaultProfile = {
+                                    uid: firebaseUser.uid,
+                                    username: firebaseUser.email ? firebaseUser.email.split('@')[0] : 'user',
+                                    displayName: firebaseUser.displayName || firebaseUser.email ? firebaseUser.email.split('@')[0] : 'User',
+                                    onLeaderboard: true,
+                                    createdAt: new Date().toISOString()
+                                };
+                                await db.collection('users').doc(firebaseUser.uid).set(defaultProfile);
+                                setUser(firebaseUser);
+                                setUserProfile(defaultProfile);
+                                setUserName(defaultProfile.displayName);
+                                localStorage.setItem('cos201_username', defaultProfile.displayName);
+                                localStorage.setItem('cos201_logged_user', JSON.stringify(defaultProfile));
+                            }
+                        } catch (err) {
+                            console.error("Error restoring session from Firestore:", err);
+                            setUser(firebaseUser);
+                            setUserProfile({ uid: firebaseUser.uid, displayName: firebaseUser.displayName || firebaseUser.email });
+                            setUserName(firebaseUser.displayName || firebaseUser.email);
+                        }
+                    } else {
+                        // No firebase auth user is signed in. Let's check if there is a guest session
+                        const savedUserJSON = localStorage.getItem('cos201_logged_user');
+                        if (savedUserJSON) {
+                            try {
+                                const savedProfile = JSON.parse(savedUserJSON);
+                                if (!savedProfile.email && savedProfile.username) {
+                                    // They are a guest!
+                                    setUser(null);
+                                    setUserProfile(savedProfile);
+                                    setUserName(savedProfile.displayName || savedProfile.username);
+                                } else {
+                                    // They were a registered user but logged out or session expired
+                                    setUser(null);
+                                    setUserProfile(null);
+                                    localStorage.removeItem('cos201_username');
+                                    localStorage.removeItem('cos201_logged_user');
+                                }
+                            } catch (e) {
+                                setUser(null);
+                                setUserProfile(null);
+                            }
+                        } else {
+                            setUser(null);
+                            setUserProfile(null);
+                        }
+                    }
+                    setAuthLoading(false);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            // --- Fetch Cloud History ---
+            const fetchCloudHistory = useCallback(async (uid) => {
+                if (!uid) return;
+                try {
+                    const snapshot = await db.collection('attempts')
+                        .where('userId', '==', uid)
+                        .orderBy('createdAt', 'desc')
+                        .limit(50)
+                        .get();
+                    
+                    const cloudHistory = [];
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        cloudHistory.push({
+                            id: doc.id,
+                            ...data,
+                            date: data.createdAt ? new Date(data.createdAt).toLocaleDateString() : 'N/A'
+                        });
+                    });
+                    
+                    setHistory(prevLocal => {
+                        const existingIds = new Set(cloudHistory.map(h => h.id));
+                        const uniqueLocal = prevLocal.filter(h => !existingIds.has(h.id));
+                        const merged = [...cloudHistory, ...uniqueLocal].sort((a, b) => b.createdAt ? new Date(b.createdAt) - new Date(a.createdAt) : 0);
+                        localStorage.setItem('cos201_history', JSON.stringify(merged));
+                        return merged;
+                    });
+                } catch (err) {
+                    console.error("Error fetching cloud history:", err);
+                }
+            }, []);
+
+            useEffect(() => {
+                if (user) {
+                    fetchCloudHistory(user.uid);
+                }
+            }, [user, fetchCloudHistory]);
+
+            // --- Fetch Public Leaderboard ---
+            const fetchLeaderboard = useCallback(async () => {
+                setLeaderboardLoading(true);
+                try {
+                    const snapshot = await db.collection('attempts')
+                        .where('onLeaderboard', '==', true)
+                        .orderBy('score', 'desc')
+                        .orderBy('createdAt', 'asc')
+                        .limit(30)
+                        .get();
+                    
+                    const list = [];
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        list.push({ 
+                            id: doc.id, 
+                            ...data,
+                            timeTaken: data.timeTaken || 'N/A'
+                        });
+                    });
+                    setLeaderboard(list);
+                } catch (err) {
+                    console.error("Error fetching leaderboard:", err);
+                } finally {
+                    setLeaderboardLoading(false);
+                }
+            }, []);
+
+            // --- Toggle Leaderboard Visibility ---
+            const toggleLeaderboardVisibility = async () => {
+                if (user) {
+                    const currentOnLeaderboard = userProfile?.onLeaderboard ?? true;
+                    const nextOnLeaderboard = !currentOnLeaderboard;
+                    
+                    try {
+                        // 1. Update Profile in Firestore
+                        await db.collection('users').doc(user.uid).update({
+                            onLeaderboard: nextOnLeaderboard
+                        });
+                        
+                        // 2. Update local state & localStorage
+                        const updatedProfile = { ...userProfile, onLeaderboard: nextOnLeaderboard };
+                        setUserProfile(updatedProfile);
+                        localStorage.setItem('cos201_logged_user', JSON.stringify(updatedProfile));
+                        
+                        // 3. Update all past attempts by this user
+                        const snapshot = await db.collection('attempts')
+                            .where('userId', '==', user.uid)
+                            .get();
+                        
+                        if (!snapshot.empty) {
+                            const batch = db.batch();
+                            snapshot.forEach(doc => {
+                                batch.update(doc.ref, { onLeaderboard: nextOnLeaderboard });
+                            });
+                            await batch.commit();
+                        }
+                        
+                        // 4. Re-fetch leaderboard to immediately reflect changes
+                        fetchLeaderboard();
+                    } catch (err) {
+                        console.error("Error toggling authenticated user leaderboard:", err);
+                    }
+                } else {
+                    // For guests
+                    const nextOnLeaderboard = !guestOnLeaderboard;
+                    setGuestOnLeaderboard(nextOnLeaderboard);
+                    
+                    try {
+                        // Update previous guest attempts if matching userName
+                        const snapshot = await db.collection('attempts')
+                            .where('userId', '==', 'anonymous')
+                            .where('userName', '==', userName)
+                            .get();
+                        
+                        if (!snapshot.empty) {
+                            const batch = db.batch();
+                            snapshot.forEach(doc => {
+                                batch.update(doc.ref, { onLeaderboard: nextOnLeaderboard });
+                            });
+                            await batch.commit();
+                        }
+                        
+                        // Re-fetch leaderboard to immediately reflect changes
+                        fetchLeaderboard();
+                    } catch (err) {
+                        console.error("Error toggling guest user leaderboard:", err);
+                    }
+                }
+            };
+
+            // --- DB Auth Handlers ---
+            const handleRegister = async (e) => {
+                e.preventDefault();
+                setAuthError('');
+                setAuthLoading(true);
+                
+                const cleanUsername = authUsername.trim().toLowerCase();
+                const cleanDisplayName = authDisplayName.trim();
+                const cleanPassword = authPassword;
+                
+                if (!cleanUsername || !cleanDisplayName || !cleanPassword) {
+                    setAuthError('Please fill in all fields.');
+                    setAuthLoading(false);
+                    return;
+                }
+                
+                if (cleanPassword.length < 6) {
+                    setAuthError('Password must be at least 6 characters.');
+                    setAuthLoading(false);
+                    return;
+                }
+                
+                try {
+                    // Check if username is already taken in our custom collection
+                    const snapshot = await db.collection('users').where('username', '==', cleanUsername).get();
+                    if (!snapshot.empty) {
+                        setAuthError('Username is already taken.');
+                        setAuthLoading(false);
+                        return;
+                    }
+                    
+                    // Create Firebase Auth user
+                    const email = cleanUsername.includes('@') ? cleanUsername : `${cleanUsername}@cos201.com`;
+                    const userCredential = await firebase.auth().createUserWithEmailAndPassword(email, cleanPassword);
+                    const firebaseUser = userCredential.user;
+                    
+                    // Update auth profile
+                    await firebaseUser.updateProfile({
+                        displayName: cleanDisplayName
+                    });
+                    
+                    // Save custom profile doc in Firestore
+                    const profile = {
+                        uid: firebaseUser.uid,
+                        username: cleanUsername,
+                        displayName: cleanDisplayName,
+                        email: firebaseUser.email,
+                        onLeaderboard: authOnLeaderboard,
+                        createdAt: new Date().toISOString()
+                    };
+                    
+                    await db.collection('users').doc(firebaseUser.uid).set(profile);
+                    
+                    setUser(firebaseUser);
+                    setUserProfile(profile);
+                    setUserName(cleanDisplayName);
+                    localStorage.setItem('cos201_username', cleanDisplayName);
+                    localStorage.setItem('cos201_logged_user', JSON.stringify(profile));
+                    
+                    setScreen('dashboard');
+                    setAuthUsername('');
+                    setAuthPassword('');
+                    setAuthDisplayName('');
+                } catch (err) {
+                    console.error("Registration error:", err);
+                    setAuthError(err.message || 'An error occurred during registration.');
+                } finally {
+                    setAuthLoading(false);
+                }
+            };
+
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                setAuthError('');
+                setAuthLoading(true);
+                
+                const cleanUsername = authUsername.trim().toLowerCase();
+                const cleanPassword = authPassword;
+                
+                if (!cleanUsername || !cleanPassword) {
+                    setAuthError('Please fill in all fields.');
+                    setAuthLoading(false);
+                    return;
+                }
+                
+                try {
+                    // Log in using Firebase Auth
+                    const email = cleanUsername.includes('@') ? cleanUsername : `${cleanUsername}@cos201.com`;
+                    const userCredential = await firebase.auth().signInWithEmailAndPassword(email, cleanPassword);
+                    const firebaseUser = userCredential.user;
+                    
+                    // Retrieve user profile document from Firestore
+                    const docRef = db.collection('users').doc(firebaseUser.uid);
+                    const userDoc = await docRef.get();
+                    let profileData;
+                    
+                    if (userDoc.exists) {
+                        profileData = userDoc.data();
+                    } else {
+                        // Create profile if missing
+                        profileData = {
+                            uid: firebaseUser.uid,
+                            username: firebaseUser.email ? firebaseUser.email.split('@')[0] : cleanUsername,
+                            displayName: firebaseUser.displayName || firebaseUser.email ? firebaseUser.email.split('@')[0] : 'User',
+                            onLeaderboard: true,
+                            createdAt: new Date().toISOString()
+                        };
+                        await docRef.set(profileData);
+                    }
+                    
+                    setUser(firebaseUser);
+                    setUserProfile(profileData);
+                    setUserName(profileData.displayName || profileData.username);
+                    localStorage.setItem('cos201_username', profileData.displayName || profileData.username);
+                    localStorage.setItem('cos201_logged_user', JSON.stringify(profileData));
+                    
+                    setScreen('dashboard');
+                    setAuthUsername('');
+                    setAuthPassword('');
+                } catch (err) {
+                    console.error("Login error:", err);
+                    setAuthError(err.message || 'Invalid username or password.');
+                } finally {
+                    setAuthLoading(false);
+                }
+            };
+
+            const handleLogout = async () => {
+                try {
+                    if (firebase.auth().currentUser) {
+                        await firebase.auth().signOut();
+                    }
+                    setUser(null);
+                    setUserProfile(null);
+                    setUserName('');
+                    localStorage.removeItem('cos201_username');
+                    localStorage.removeItem('cos201_logged_user');
+                    setScreen('onboarding');
+                } catch (err) {
+                    console.error("Logout error:", err);
+                }
+            };
+
+            useEffect(() => {
+                const savedName = localStorage.getItem('cos201_username');
+                const savedHistory = localStorage.getItem('cos201_history');
+                if (savedName) {
+                    setUserName(savedName);
+                    setScreen('dashboard');
+                }
+                if (savedHistory) {
+                    setHistory(JSON.parse(savedHistory));
+                }
+            }, []);
+
+            const submitToNetlify = useCallback(async (attempt, printed = false) => {
+                const formData = new URLSearchParams();
+                formData.append('form-name', 'exam-submissions');
+                formData.append('bot-field', '');
+                formData.append('name', userName);
+                formData.append('score', `${attempt.score}%`);
+                formData.append('correct', `${attempt.correct}`);
+                formData.append('incorrect', `${attempt.incorrect}`);
+                formData.append('time_taken', attempt.timeTaken);
+                formData.append('printed', printed ? 'Yes' : 'No');
+
+                try {
+                    await fetch('/', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: formData.toString()
+                    });
+                } catch (err) {
+                    console.error('Netlify submission failed', err);
+                }
+            }, [userName]);
+
+            const submitExam = useCallback(async () => {
+                const endTime = Date.now();
+                const durationSeconds = Math.floor((endTime - startTime) / 1000);
+                const timeTakenStr = formatTime(durationSeconds);
+
+                const questionsResults = currentQuestions.map(q => {
+                    const userAnswer = userAnswers[q.id] || '';
+                    return {
+                        question: q,
+                        userAnswer,
+                        isCorrect: userAnswer === q.correctAnswer
+                    };
+                });
+
+                const correctCount = questionsResults.filter(r => r.isCorrect).length;
+                const score = Math.round((correctCount / currentQuestions.length) * 100);
+
+                const isLeaderboardEligible = user ? (userProfile?.onLeaderboard ?? authOnLeaderboard) : guestOnLeaderboard;
+
+                const attempt = {
+                    id: Date.now().toString(),
+                    date: new Date().toLocaleDateString(),
+                    score,
+                    correct: correctCount,
+                    incorrect: currentQuestions.length - correctCount,
+                    total: currentQuestions.length,
+                    timeTaken: timeTakenStr,
+                    questions: questionsResults,
+                    course: selectedCourse,
+                    difficulty: selectedCourse === 'gst212' ? selectedDifficulty : null,
+                    onLeaderboard: isLeaderboardEligible,
+                    userId: user ? user.uid : 'anonymous'
+                };
+
+                // Prepare Firestore DB attempt object
+                const dbAttempt = {
+                    userId: user ? user.uid : 'anonymous',
+                    userName: user ? (userProfile?.displayName || userProfile?.username || userName) : userName,
+                    score,
+                    correct: correctCount,
+                    incorrect: currentQuestions.length - correctCount,
+                    total: currentQuestions.length,
+                    timeTaken: timeTakenStr,
+                    course: selectedCourse,
+                    difficulty: selectedCourse === 'gst212' ? selectedDifficulty : 'standard',
+                    onLeaderboard: isLeaderboardEligible,
+                    createdAt: new Date().toISOString()
+                };
+
+                try {
+                    const docRef = await db.collection('attempts').add(dbAttempt);
+                    attempt.id = docRef.id;
+                } catch (err) {
+                    console.error("Error saving score to database:", err);
+                }
+
+                const newHistory = [attempt, ...history];
+                setHistory(newHistory);
+                localStorage.setItem('cos201_history', JSON.stringify(newHistory));
+                setLastAttempt(attempt);
+                setScreen('results');
+                setShowConfirmModal(false);
+                submitToNetlify(attempt);
+            }, [startTime, currentQuestions, userAnswers, history, submitToNetlify, selectedCourse, selectedDifficulty, user, userProfile, authOnLeaderboard, guestOnLeaderboard, userName]);
+
+            useEffect(() => {
+                let timer;
+                if (screen === 'exam' && !isUnlimited) {
+                    timer = setInterval(() => {
+                        setTimeLeft(prev => {
+                            if (prev <= 1) {
+                                submitExam();
+                                return 0;
+                            }
+                            return prev - 1;
+                        });
+                    }, 1000);
+                }
+                return () => clearInterval(timer);
+            }, [screen, isUnlimited, submitExam]);
+
+            const startExam = (unlimited) => {
+                let pool = [];
+                let targetCount = 60;
+
+                if (selectedCourse === 'cos201') {
+                    pool = COS201_QUESTIONS;
+                    targetCount = 60;
+                } else if (selectedCourse === 'gst212') {
+                    const allGst = window.GST212_QUESTIONS || [];
+                    if (selectedDifficulty === 'all') {
+                        pool = allGst;
+                        targetCount = 60;
+                    } else {
+                        pool = allGst.filter(q => q.difficulty === selectedDifficulty);
+                        targetCount = Math.min(pool.length, 40);
+                    }
+                }
+
+                const sections = Array.from(new Set(pool.map(q => q.section)));
+                const grouped = {};
+                sections.forEach(s => {
+                    grouped[s] = shuffleArray(pool.filter(q => q.section === s));
+                });
+
+                const selected = [];
+                let sectionIndex = 0;
+                let attempts = 0;
+                while (selected.length < targetCount && attempts < 1000) {
+                    const section = sections[sectionIndex % sections.length];
+                    const question = grouped[section].pop();
+                    if (question) selected.push(question);
+                    sectionIndex++;
+                    attempts++;
+                    if (sections.every(s => grouped[s].length === 0)) break;
+                }
+
+                const finalPool = shuffleArray(selected).map(q => ({
+                    ...q,
+                    options: shuffleArray(q.options)
+                }));
+
+                setCurrentQuestions(finalPool);
+                setUserAnswers({});
+                setCurrentIndex(0);
+                setTimeLeft(3600);
+                setIsUnlimited(unlimited);
+                setStartTime(Date.now());
+                setScreen('exam');
+            };
+
+            if (screen === 'onboarding') {
+                return (
+                    <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-slate-50 to-slate-100">
+                        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bento-card max-w-md w-full p-10 text-center">
+                            <div className="w-16 h-16 bg-[#004493]/10 text-[#004493] rounded-2xl flex items-center justify-center mx-auto mb-6">
+                                <GraduationCap size={32} />
+                            </div>
+                            <h1 className="text-3xl font-bold mb-2">Welcome, Scholar</h1>
+                            <p className="text-sm text-[#424654] mb-8">Access the Computer Science & General Studies Exam Simulator.</p>
+                            
+                            {/* Auth Tabs */}
+                            <div className="flex bg-slate-100 p-1 rounded-xl mb-6">
+                                {[
+                                    { id: 'guest', label: 'Guest Mode' },
+                                    { id: 'login', label: 'Sign In' },
+                                    { id: 'register', label: 'Register' }
+                                ].map((tab) => (
+                                    <button
+                                        key={tab.id}
+                                        type="button"
+                                        onClick={() => { setAuthTab(tab.id); setAuthError(''); }}
+                                        className={`flex-1 py-2 text-center font-bold text-xs rounded-lg transition-all ${
+                                            authTab === tab.id 
+                                                ? 'bg-[#004493] text-white shadow-sm' 
+                                                : 'text-slate-500 hover:text-slate-700'
+                                        }`}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Forms based on selected Auth Tab */}
+                            {authTab === 'guest' && (
+                                <form onSubmit={(e) => { e.preventDefault(); if(userName.trim()) { localStorage.setItem('cos201_username', userName.trim()); setScreen('dashboard'); } }} className="space-y-4 text-left">
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Enter Display Name</label>
+                                        <input type="text" placeholder="Your Full Name" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#004493] outline-none transition-all" value={userName} onChange={(e) => setUserName(e.target.value)} required />
+                                    </div>
+                                    <label className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-100 cursor-pointer hover:bg-slate-100/50 transition-all">
+                                        <input type="checkbox" checked={guestOnLeaderboard} onChange={(e) => setGuestOnLeaderboard(e.target.checked)} className="mt-1 accent-[#004493]" />
+                                        <div className="text-xs">
+                                            <span className="font-bold text-slate-700 block">Join Public Leaderboard</span>
+                                            <span className="text-slate-400">Include my high scores on the public leaderboard.</span>
+                                        </div>
+                                    </label>
+                                    <button type="submit" className="btn-primary w-full mt-2">Enter Simulator <ChevronRight size={18} /></button>
+                                </form>
+                            )}
+
+                            {authTab === 'login' && (
+                                <form onSubmit={handleLogin} className="space-y-4 text-left">
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Username</label>
+                                        <input type="text" placeholder="e.g. joshua_dev" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#004493] outline-none transition-all" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} required />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Password</label>
+                                        <input type="password" placeholder="••••••••" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#004493] outline-none transition-all" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} required />
+                                    </div>
+                                    
+                                    {authError && (
+                                        <div className="p-3 bg-red-50 text-red-600 rounded-xl text-xs font-semibold border border-red-100 flex items-center gap-2">
+                                            <AlertCircle size={14} className="shrink-0" />
+                                            <span>{authError}</span>
+                                        </div>
+                                    )}
+
+                                    <button type="submit" disabled={authLoading} className="btn-primary w-full mt-2">
+                                        {authLoading ? (
+                                            <div className="flex justify-center py-1"><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div></div>
+                                        ) : (
+                                            <>Sign In <ChevronRight size={18} /></>
+                                        )}
+                                    </button>
+                                </form>
+                            )}
+
+                            {authTab === 'register' && (
+                                <form onSubmit={handleRegister} className="space-y-4 text-left">
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Choose Username</label>
+                                        <input type="text" placeholder="e.g. joshua_dev" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#004493] outline-none transition-all" value={authUsername} onChange={(e) => setAuthUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))} required />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Full Name</label>
+                                        <input type="text" placeholder="e.g. Joshua Adesina" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#004493] outline-none transition-all" value={authDisplayName} onChange={(e) => setAuthDisplayName(e.target.value)} required />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Password</label>
+                                        <input type="password" placeholder="Min. 6 characters" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#004493] outline-none transition-all" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} required />
+                                    </div>
+                                    <label className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-100 cursor-pointer hover:bg-slate-100/50 transition-all">
+                                        <input type="checkbox" checked={authOnLeaderboard} onChange={(e) => setAuthOnLeaderboard(e.target.checked)} className="mt-1 accent-[#004493]" />
+                                        <div className="text-xs">
+                                            <span className="font-bold text-slate-700 block">Always Join Public Leaderboard</span>
+                                            <span className="text-slate-400">Show my verified scores to other scholars.</span>
+                                        </div>
+                                    </label>
+
+                                    {authError && (
+                                        <div className="p-3 bg-red-50 text-red-600 rounded-xl text-xs font-semibold border border-red-100 flex items-center gap-2">
+                                            <AlertCircle size={14} className="shrink-0" />
+                                            <span>{authError}</span>
+                                        </div>
+                                    )}
+
+                                    <button type="submit" disabled={authLoading} className="btn-primary w-full mt-2">
+                                        {authLoading ? (
+                                            <div className="flex justify-center py-1"><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div></div>
+                                        ) : (
+                                            <>Register Profile <ChevronRight size={18} /></>
+                                        )}
+                                    </button>
+                                </form>
+                            )}
+                        </motion.div>
+                    </div>
+                );
+            }
+
+            if (screen === 'dashboard') {
+                const filteredHistory = history.filter(h => {
+                    if (selectedCourse === 'cos201') {
+                        return h.course === 'cos201' || !h.course;
+                    }
+                    return h.course === 'gst212';
+                });
+                const bestScore = filteredHistory.length > 0 ? Math.max(...filteredHistory.map(h => h.score)) : 0;
+
+                return (
+                    <div className="min-h-screen bg-slate-50/50">
+                        <div className="max-w-7xl mx-auto px-6 py-12">
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
+                                <div className="flex-1">
+                                    <h1 className="text-4xl font-bold mb-2">The Intellectual Sanctuary</h1>
+                                    {user ? (
+                                        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                                            <p className="text-[#424654] flex items-center gap-2">
+                                                <User size={16} className="text-[#004493]" /> 
+                                                Welcome back, <strong className="text-[#004493]">{userProfile?.displayName || userName}</strong> 
+                                                <span className="text-slate-400 font-normal">(@{userProfile?.username})</span>
+                                            </p>
+                                            <button 
+                                                onClick={toggleLeaderboardVisibility}
+                                                className={`self-start text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 shrink-0 ${
+                                                    (userProfile?.onLeaderboard ?? authOnLeaderboard) 
+                                                        ? 'text-[#004493] bg-blue-50 hover:bg-blue-100 border border-[#004493]/10' 
+                                                        : 'text-slate-500 bg-slate-100 hover:bg-slate-200 border border-slate-200'
+                                                }`}
+                                                title="Click to toggle your public leaderboard visibility"
+                                            >
+                                                {(userProfile?.onLeaderboard ?? authOnLeaderboard) ? <Eye size={11} /> : <EyeOff size={11} />}
+                                                Leaderboard: {(userProfile?.onLeaderboard ?? authOnLeaderboard) ? 'ON' : 'OFF'}
+                                            </button>
+                                            <button 
+                                                onClick={handleLogout}
+                                                className="self-start text-[11px] font-bold text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 shrink-0"
+                                            >
+                                                <LogOut size={11} /> Sign Out
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                                            <p className="text-[#424654] flex items-center gap-2">
+                                                <User size={16} /> 
+                                                Welcome back, <strong className="text-slate-700">{userName}</strong> 
+                                                <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-semibold">Guest</span>
+                                            </p>
+                                            <button 
+                                                onClick={toggleLeaderboardVisibility}
+                                                className={`self-start text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 shrink-0 ${
+                                                    guestOnLeaderboard 
+                                                        ? 'text-[#004493] bg-blue-50 hover:bg-blue-100 border border-[#004493]/10' 
+                                                        : 'text-slate-500 bg-slate-100 hover:bg-slate-200 border border-slate-200'
+                                                }`}
+                                                title="Click to toggle your public leaderboard visibility"
+                                            >
+                                                {guestOnLeaderboard ? <Eye size={11} /> : <EyeOff size={11} />}
+                                                Leaderboard: {guestOnLeaderboard ? 'ON' : 'OFF'}
+                                            </button>
+                                            <button 
+                                                onClick={() => setScreen('onboarding')}
+                                                className="self-start text-[11px] font-bold text-[#004493] bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 shrink-0"
+                                            >
+                                                Sign In / Register
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex gap-4">
+                                    <button onClick={() => startExam(false)} className="btn-primary"><Play size={18} /> Start Simulation</button>
+                                    <button onClick={() => startExam(true)} className="px-6 py-3 rounded-xl border border-slate-200 font-bold hover:bg-slate-50 transition-all">Unlimited Mode</button>
+                                </div>
+                            </div>
+
+                            {/* Course Selection Cards */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                                <button 
+                                    onClick={() => setSelectedCourse('cos201')} 
+                                    className={`bento-card text-left flex items-start gap-5 cursor-pointer border-2 transition-all p-6 ${selectedCourse === 'cos201' ? 'border-[#004493] ring-2 ring-[#004493]/10 bg-white' : 'border-transparent bg-white hover:border-slate-200'}`}
+                                >
+                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold transition-all ${selectedCourse === 'cos201' ? 'bg-[#004493]/15 text-[#004493]' : 'bg-slate-100 text-slate-500'}`}>
+                                        <GraduationCap size={24} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Course I</span>
+                                            <span className="text-xs font-bold uppercase tracking-wider text-[#004493]">Computer Science</span>
+                                        </div>
+                                        <h3 className="font-bold text-lg text-slate-900 leading-snug">COS201: Computer Programming I</h3>
+                                        <p className="text-xs text-[#424654] mt-1 leading-normal">Algorithms, flowcharts, decision tables, & programming paradigms.</p>
+                                    </div>
+                                </button>
+                                
+                                <button 
+                                    onClick={() => setSelectedCourse('gst212')} 
+                                    className={`bento-card text-left flex items-start gap-5 cursor-pointer border-2 transition-all p-6 ${selectedCourse === 'gst212' ? 'border-[#004493] ring-2 ring-[#004493]/10 bg-white' : 'border-transparent bg-white hover:border-slate-200'}`}
+                                >
+                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold transition-all ${selectedCourse === 'gst212' ? 'bg-[#004493]/15 text-[#004493]' : 'bg-slate-100 text-slate-500'}`}>
+                                        <BookOpen size={24} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Course II</span>
+                                            <span className="text-xs font-bold uppercase tracking-wider text-[#004493]">General Studies</span>
+                                        </div>
+                                        <h3 className="font-bold text-lg text-slate-900 leading-snug">GST212: Philosophy and Human Existence</h3>
+                                        <p className="text-xs text-[#424654] mt-1 leading-normal">Etymology, logic systems, rules of inference, & fallacies.</p>
+                                    </div>
+                                </button>
+                            </div>
+
+                            {/* Difficulty Selector for GST212 */}
+                            {selectedCourse === 'gst212' && (
+                                <motion.div 
+                                    initial={{ opacity: 0, y: 15 }} 
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="bento-card bg-white p-8 mb-8 border border-slate-100"
+                                >
+                                    <div className="flex items-center gap-3 mb-6">
+                                        <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                                            <Target size={18} />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-bold text-lg text-slate-900 leading-snug">Select Cognitive Difficulty Tier</h3>
+                                            <p className="text-xs text-[#424654]">Tailor the simulation challenge to your current study goals.</p>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        {[
+                                            { 
+                                                id: 'easy', 
+                                                label: 'Easy Tier', 
+                                                desc: 'Direct Retrieval & Literal Recall', 
+                                                questions: '40 Questions',
+                                            },
+                                            { 
+                                                id: 'medium', 
+                                                label: 'Medium Tier', 
+                                                desc: 'Conceptual & Contextual Application', 
+                                                questions: '40 Questions',
+                                            },
+                                            { 
+                                                id: 'hard', 
+                                                label: 'Hard Tier', 
+                                                desc: 'Advanced Synthesis & Analytics', 
+                                                questions: '40 Questions',
+                                            },
+                                            { 
+                                                id: 'all', 
+                                                label: 'All Tiers', 
+                                                desc: 'Comprehensive Philosophy Exam', 
+                                                questions: '60 Random Questions',
+                                            }
+                                        ].map((tier) => (
+                                            <button
+                                                key={tier.id}
+                                                onClick={() => setSelectedDifficulty(tier.id)}
+                                                className={`p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                                                    selectedDifficulty === tier.id 
+                                                        ? 'border-[#004493] ring-1 ring-[#004493] bg-[#004493]/5 text-[#004493]' 
+                                                        : 'border-slate-100 bg-white hover:border-slate-200 text-slate-700'
+                                                }`}
+                                            >
+                                                <div>
+                                                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                                                        selectedDifficulty === tier.id ? 'bg-[#004493]/10 text-[#004493]' : 'bg-slate-100 text-slate-500'
+                                                    }`}>
+                                                        {tier.label}
+                                                    </span>
+                                                    <p className="text-sm font-semibold mt-3 mb-1 leading-snug">{tier.desc}</p>
+                                                </div>
+                                                <div className="text-xs font-medium opacity-60 mt-4 flex items-center gap-1.5">
+                                                    <BookOpen size={12} /> {tier.questions}
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            )}
+
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                                <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="bento-card md:col-span-2 bg-[#004493] text-white overflow-hidden relative">
+                                        <div className="relative z-10">
+                                            <h2 className="text-2xl font-bold mb-4">
+                                                {selectedCourse === 'cos201' ? 'COS201: Computer Programming I' : 'GST212: Philosophy and Human Existence'}
+                                            </h2>
+                                            <p className="opacity-80 mb-6 max-w-md">
+                                                {selectedCourse === 'cos201' 
+                                                    ? 'Master the fundamentals of algorithms, flowcharts, and programming paradigms.' 
+                                                    : `Explore philosophical definitions, classical laws of thought, syllogistic logic, and ethical theories in ${selectedDifficulty.toUpperCase()} difficulty.`}
+                                            </p>
+                                            <div className="flex gap-8">
+                                                <div><div className="text-3xl font-bold">{filteredHistory.length}</div><div className="text-sm opacity-60 uppercase tracking-widest font-bold">Attempts</div></div>
+                                                <div><div className="text-3xl font-bold">{bestScore}%</div><div className="text-sm opacity-60 uppercase tracking-widest font-bold">Best Score</div></div>
+                                            </div>
+                                        </div>
+                                        <BookOpen className="absolute -right-8 -bottom-8 opacity-10 w-64 h-64" />
+                                    </div>
+                                    <div className="bento-card"><div className="flex items-center gap-3 mb-4 text-[#004493]"><Target size={20} /><h3 className="font-bold uppercase tracking-wider text-sm">Target Mastery</h3></div><div className="text-4xl font-bold mb-2">70%</div><p className="text-[#424654] text-sm">Required for Distinction badge.</p></div>
+                                    <div className="bento-card">
+                                        <div className="flex items-center gap-3 mb-4 text-[#004493]"><Clock size={20} /><h3 className="font-bold uppercase tracking-wider text-sm">Exam Format</h3></div>
+                                        <div className="text-xl font-bold mb-2">
+                                            {selectedCourse === 'cos201' ? '60 Questions' : selectedDifficulty === 'all' ? '60 Questions' : '40 Questions'}
+                                        </div>
+                                        <p className="text-[#424654] text-sm">
+                                            {selectedCourse === 'cos201' ? '60 minutes limit.' : `60 minutes limit on ${selectedDifficulty.toUpperCase()} tier.`}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="lg:col-span-4 space-y-6">
+                                    <div className="bento-card h-full">
+                                        <div className="flex border-b border-slate-100 mb-6 p-1 bg-slate-50 rounded-xl">
+                                            <button 
+                                                onClick={() => setSidebarTab('history')}
+                                                className={`flex-1 py-2 text-center font-bold text-xs rounded-lg transition-all ${
+                                                    sidebarTab === 'history' 
+                                                        ? 'bg-white text-[#004493] shadow-sm' 
+                                                        : 'text-slate-500 hover:text-slate-700'
+                                                }`}
+                                            >
+                                                My History
+                                            </button>
+                                            <button 
+                                                onClick={() => { setSidebarTab('leaderboard'); fetchLeaderboard(); }}
+                                                className={`flex-1 py-2 text-center font-bold text-xs rounded-lg transition-all ${
+                                                    sidebarTab === 'leaderboard' 
+                                                        ? 'bg-white text-[#004493] shadow-sm' 
+                                                        : 'text-slate-500 hover:text-slate-700'
+                                                }`}
+                                            >
+                                                Leaderboard
+                                            </button>
+                                        </div>
+
+                                        {sidebarTab === 'history' ? (
+                                            <div className="space-y-4">
+                                                <div className="flex items-center justify-between mb-4">
+                                                    <div className="flex items-center gap-2.5 text-[#004493]">
+                                                        <History size={16} />
+                                                        <h3 className="font-bold uppercase tracking-wider text-xs">Recent History</h3>
+                                                    </div>
+                                                </div>
+                                                {filteredHistory.length === 0 ? (
+                                                    <div className="text-center py-12 text-[#424654]">
+                                                        <AlertCircle className="mx-auto mb-2 opacity-20" size={32} />
+                                                        <p className="text-sm">No attempts yet.</p>
+                                                    </div>
+                                                ) : (
+                                                    filteredHistory.slice(0, 5).map(attempt => (
+                                                        <div key={attempt.id} className="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-slate-100">
+                                                            <div>
+                                                                <div className="font-bold">{attempt.score}%</div>
+                                                                <div className="text-xs text-[#424654]">{attempt.date}</div>
+                                                                {attempt.difficulty && <div className="text-[10px] font-bold text-[#004493] uppercase tracking-wider mt-1">{attempt.difficulty} tier</div>}
+                                                            </div>
+                                                            <div className={`text-xs font-bold px-2 py-1 rounded-full ${attempt.score >= 70 ? 'bg-yellow-100 text-yellow-700' : attempt.score >= 40 ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>
+                                                                {attempt.score >= 70 ? 'Distinction' : attempt.score >= 40 ? 'Passed' : 'Failed'}
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                <div className="flex items-center justify-between mb-4">
+                                                    <div className="flex items-center gap-2.5 text-[#004493]">
+                                                        <Trophy size={16} />
+                                                        <h3 className="font-bold uppercase tracking-wider text-xs">High Score Board</h3>
+                                                    </div>
+                                                    <button onClick={fetchLeaderboard} className="text-[10px] font-bold text-[#004493] hover:underline flex items-center gap-1">Refresh</button>
+                                                </div>
+
+                                                {/* Leaderboard visibility toggle card */}
+                                                <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between gap-3 text-xs">
+                                                    <div className="flex items-center gap-2">
+                                                        {(user ? (userProfile?.onLeaderboard ?? authOnLeaderboard) : guestOnLeaderboard) ? (
+                                                            <Eye size={16} className="text-[#004493] shrink-0" />
+                                                        ) : (
+                                                            <EyeOff size={16} className="text-slate-400 shrink-0" />
+                                                        )}
+                                                        <div>
+                                                            <span className="font-bold text-slate-700 block">Show on Leaderboard</span>
+                                                            <span className="text-[10px] text-slate-500 leading-none">Toggle your public score visibility</span>
+                                                        </div>
+                                                    </div>
+                                                    <button 
+                                                        onClick={toggleLeaderboardVisibility}
+                                                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                                            (user ? (userProfile?.onLeaderboard ?? authOnLeaderboard) : guestOnLeaderboard) 
+                                                                ? 'bg-[#004493]' 
+                                                                : 'bg-slate-200'
+                                                        }`}
+                                                    >
+                                                        <span 
+                                                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                                                (user ? (userProfile?.onLeaderboard ?? authOnLeaderboard) : guestOnLeaderboard) 
+                                                                    ? 'translate-x-5' 
+                                                                    : 'translate-x-0'
+                                                            }`} 
+                                                        />
+                                                    </button>
+                                                </div>
+
+                                                {leaderboardLoading ? (
+                                                    <div className="text-center py-12 text-[#424654]">
+                                                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#004493] mx-auto mb-2"></div>
+                                                        <p className="text-xs">Gathering top scores...</p>
+                                                    </div>
+                                                ) : leaderboard.length === 0 ? (
+                                                    <div className="text-center py-12 text-[#424654]">
+                                                        <AlertCircle className="mx-auto mb-2 opacity-20" size={32} />
+                                                        <p className="text-sm">Leaderboard is empty.</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
+                                                        {leaderboard.map((item, idx) => {
+                                                            const isUser = user && item.userId === user.uid;
+                                                            return (
+                                                                <div 
+                                                                    key={item.id} 
+                                                                    className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${
+                                                                        isUser 
+                                                                            ? 'bg-[#004493]/5 border-[#004493]/30 ring-1 ring-[#004493]/10' 
+                                                                            : 'bg-slate-50 border-slate-100 hover:border-slate-200'
+                                                                    }`}
+                                                                >
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] ${
+                                                                            idx === 0 
+                                                                                ? 'bg-yellow-500 text-white shadow-sm shadow-yellow-500/20' 
+                                                                                : idx === 1 
+                                                                                    ? 'bg-slate-400 text-white' 
+                                                                                    : idx === 2 
+                                                                                        ? 'bg-amber-600 text-white' 
+                                                                                        : 'bg-slate-200 text-slate-600'
+                                                                        }`}>
+                                                                            {idx + 1}
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="font-bold text-slate-800 text-sm flex items-center gap-1.5 leading-none mb-1">
+                                                                                {item.userName}
+                                                                                {isUser && <span className="text-[9px] font-bold uppercase bg-[#004493] text-white px-1 py-0.5 rounded leading-none">You</span>}
+                                                                            </div>
+                                                                            <div className="text-[9px] text-slate-400 uppercase tracking-wider font-semibold flex items-center gap-1 leading-none">
+                                                                                <span>{item.course?.toUpperCase()}</span>
+                                                                                {item.difficulty && (
+                                                                                    <>
+                                                                                        <span>•</span>
+                                                                                        <span>{item.difficulty}</span>
+                                                                                    </>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="text-right">
+                                                                        <div className="font-extrabold text-slate-900 text-sm">{item.score}%</div>
+                                                                        <div className="text-[9px] text-[#424654] leading-none mt-1">{item.timeTaken}</div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (screen === 'exam') {
+                const currentQ = currentQuestions[currentIndex];
+                const progress = ((currentIndex + 1) / currentQuestions.length) * 100;
+                return (
+                    <div className="min-h-screen flex flex-col bg-slate-50">
+                        <header className="glass sticky top-0 z-30 px-6 py-4">
+                            <div className="max-w-5xl mx-auto flex justify-between items-center">
+                                <div className="flex items-center gap-4"><div className="w-10 h-10 bg-[#004493] text-white rounded-lg flex items-center justify-center font-bold">{currentIndex + 1}</div><div><div className="text-sm font-bold uppercase tracking-widest text-[#424654]">Question {currentIndex + 1} of {currentQuestions.length}</div><div className="text-xs text-[#004493] font-medium">{currentQ.section}</div></div></div>
+                                <div className="flex items-center gap-6"><div className={`flex items-center gap-2 font-mono font-bold text-xl ${timeLeft < 300 ? 'text-red-500 animate-pulse' : 'text-[#004493]'}`}><TimerIcon size={20} />{isUnlimited ? '∞' : formatTime(timeLeft)}</div><button onClick={() => setShowConfirmModal(true)} className="px-6 py-2 bg-[#004493] text-white rounded-lg font-bold hover:opacity-90 transition-all">Submit</button></div>
+                            </div>
+                            <div className="absolute bottom-0 left-0 h-1 bg-slate-200 w-full"><motion.div className="h-full bg-[#004493]" initial={{ width: 0 }} animate={{ width: `${progress}%` }} /></div>
+                        </header>
+                        <main className="flex-grow flex items-center justify-center p-6">
+                            <AnimatePresence mode="wait">
+                                <motion.div key={currentIndex} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="bento-card max-w-3xl w-full p-10">
+                                    <h2 className="text-2xl font-bold mb-8 leading-tight">{currentQ.text}</h2>
+                                    <div className="space-y-4">
+                                        {currentQ.options.map((option, idx) => (
+                                            <button key={idx} onClick={() => setUserAnswers(prev => ({ ...prev, [currentQ.id]: option }))} className={`w-full text-left p-5 rounded-xl border-2 transition-all flex items-center gap-4 group ${userAnswers[currentQ.id] === option ? 'border-[#004493] bg-[#004493]/5 ring-1 ring-[#004493]' : 'border-slate-100 hover:border-slate-300 hover:bg-slate-50'}`}>
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold transition-all ${userAnswers[currentQ.id] === option ? 'bg-[#004493] text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'}`}>{String.fromCharCode(65 + idx)}</div>
+                                                <span className="text-lg">{option}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            </AnimatePresence>
+                        </main>
+                        <footer className="p-6 bg-white border-t border-slate-100">
+                            <div className="max-w-5xl mx-auto flex justify-between">
+                                <button onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))} disabled={currentIndex === 0} className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-[#424654] hover:bg-slate-50 disabled:opacity-30 transition-all"><ChevronLeft size={20} /> Previous</button>
+                                <button onClick={() => { if (currentIndex < currentQuestions.length - 1) setCurrentIndex(prev => prev + 1); else setShowConfirmModal(true); }} className="btn-primary">{currentIndex === currentQuestions.length - 1 ? 'Finish Exam' : 'Next Question'} <ChevronRight size={20} /></button>
+                            </div>
+                        </footer>
+                        <AnimatePresence>
+                            {showConfirmModal && (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/50 backdrop-blur-sm">
+                                    <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bento-card max-w-md w-full text-center">
+                                        <div className="w-16 h-16 bg-yellow-50 text-yellow-600 rounded-full flex items-center justify-center mx-auto mb-6"><AlertCircle size={32} /></div>
+                                        <h3 className="text-2xl font-bold mb-2">Ready to Submit?</h3>
+                                        <p className="text-[#424654] mb-8">You have answered {Object.keys(userAnswers).length} out of {currentQuestions.length} questions.</p>
+                                        <div className="flex gap-4"><button onClick={() => setShowConfirmModal(false)} className="flex-1 px-6 py-3 rounded-xl border border-slate-200 font-bold hover:bg-slate-50 transition-all">Review</button><button onClick={submitExam} className="flex-1 btn-primary">Submit Now</button></div>
+                                    </motion.div>
+                                </div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+                );
+            }
+
+            if (screen === 'results' && lastAttempt) {
+                return (
+                    <div className="max-w-7xl mx-auto px-6 py-12">
+                        <div className="no-print">
+                            <div className="flex justify-between items-center mb-12"><h1 className="text-4xl font-bold">Simulation Analysis</h1><div className="flex gap-4"><button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-200 font-bold hover:bg-slate-50 transition-all"><Printer size={18} /> Print Corrections</button><button onClick={() => setScreen('dashboard')} className="btn-primary"><LayoutDashboard size={18} /> Dashboard</button></div></div>
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
+                                <div className="lg:col-span-8 bento-card bg-slate-50 border-none flex flex-col md:flex-row items-center gap-12 p-12">
+                                    <div className="relative"><svg className="w-48 h-48 transform -rotate-90"><circle cx="96" cy="96" r="88" fill="none" stroke="currentColor" strokeWidth="12" className="text-slate-200" /><motion.circle cx="96" cy="96" r="88" fill="none" stroke="currentColor" strokeWidth="12" strokeDasharray={552.92} initial={{ strokeDashoffset: 552.92 }} animate={{ strokeDashoffset: 552.92 - (552.92 * lastAttempt.score) / 100 }} transition={{ duration: 1.5, ease: "easeOut" }} className="text-[#004493]" /></svg><div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-5xl font-bold">{lastAttempt.score}%</span><span className="text-xs font-bold uppercase tracking-widest opacity-40">Final Score</span></div></div>
+                                    <div className="flex-grow text-center md:text-left"><div className="mb-4"><Badge score={lastAttempt.score} /></div><h2 className="text-3xl font-bold mb-4">Performance Insights</h2><p className="text-[#424654] mb-6">{lastAttempt.score >= 70 ? "Excellent mastery!" : lastAttempt.score >= 40 ? "Solid understanding." : "Focus on the basics."}</p><div className="grid grid-cols-3 gap-6"><div><div className="text-2xl font-bold text-green-600">{lastAttempt.correct}</div><div className="text-xs font-bold opacity-40 uppercase tracking-widest">Correct</div></div><div><div className="text-2xl font-bold text-red-500">{lastAttempt.incorrect}</div><div className="text-xs font-bold opacity-40 uppercase tracking-widest">Incorrect</div></div><div><div className="text-2xl font-bold text-[#004493]">{lastAttempt.timeTaken}</div><div className="text-xs font-bold opacity-40 uppercase tracking-widest">Time</div></div></div></div>
+                                </div>
+                                <div className="lg:col-span-4 bento-card bg-[#004493] text-white flex flex-col justify-center p-10"><h3 className="text-xl font-bold mb-4">Mastery Breakdown</h3><div className="space-y-4"><div className="flex justify-between items-center"><span className="opacity-70">Accuracy</span><span className="font-bold">{lastAttempt.score}%</span></div><div className="w-full h-2 bg-white/20 rounded-full overflow-hidden"><div className="h-full bg-white" style={{ width: `${lastAttempt.score}%` }} /></div><div className="flex justify-between items-center pt-4"><span className="opacity-70">Completion</span><span className="font-bold">100%</span></div><div className="w-full h-2 bg-white/20 rounded-full overflow-hidden"><div className="h-full bg-white" style={{ width: '100%' }} /></div></div></div>
+                            </div>
+                            <h3 className="text-2xl font-bold mb-8">Corrections View</h3>
+                            <div className="space-y-6">
+                                {lastAttempt.questions.map((result, idx) => (
+                                    <div key={idx} className={`bento-card border-l-4 ${result.isCorrect ? 'border-green-500' : 'border-red-500'}`}>
+                                        <div className="flex justify-between items-start mb-4"><div className="text-xs font-bold uppercase tracking-widest text-[#424654]">Question {idx + 1}</div>{result.isCorrect ? <span className="flex items-center gap-1 text-green-600 font-bold text-sm"><CheckCircle2 size={16} /> Correct</span> : <span className="flex items-center gap-1 text-red-500 font-bold text-sm"><XCircle size={16} /> Incorrect</span>}</div>
+                                        <h4 className="text-lg font-bold mb-6">{result.question.text}</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className={`p-4 rounded-xl border ${result.isCorrect ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}><div className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1">Your Choice</div><div className="font-medium">{result.userAnswer || 'No answer provided'}</div></div>
+                                            {!result.isCorrect && <div className="p-4 rounded-xl bg-green-50 border border-green-100"><div className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1">Correct Answer</div><div className="font-medium">{result.question.correctAnswer}</div></div>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="print-only p-12"><div className="text-center mb-12 border-b pb-8"><h1 className="text-4xl font-bold mb-2">{lastAttempt.course === 'gst212' ? 'GST212 Philosophy and Human Existence' : 'COS201 Computer Programming I'} Exam Corrections</h1><p className="text-xl">Student: {userName}</p><p className="text-slate-500">Date: {lastAttempt.date} | Score: {lastAttempt.score}%</p></div><div className="space-y-8">{lastAttempt.questions.map((result, idx) => (<div key={idx} className="pb-6 border-b"><div className="font-bold mb-2">Question {idx + 1}: {result.question.text}</div><div className="grid grid-cols-2 gap-4 text-sm"><div><span className="font-bold">Your Answer:</span> {result.userAnswer || 'None'}</div><div><span className="font-bold">Correct Answer:</span> {result.question.correctAnswer}</div></div><div className={`mt-2 font-bold text-xs uppercase ${result.isCorrect ? 'text-green-600' : 'text-red-600'}`}>{result.isCorrect ? '✓ Correct' : '✗ Incorrect'}</div></div>))}</div></div>
+                    </div>
+                );
+            }
+            return null;
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

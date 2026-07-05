@@ -1,0 +1,5 @@
+{
+  "name": "COS201 Exam Simulator",
+  "description": "A high-end, academic exam simulator for COS201 (Computer Programming I) and GST212 (Philosophy and Human Existence), featuring custom difficulty selection, bento-grid layouts, and performance analytics.",
+  "requestFramePermissions": []
+}

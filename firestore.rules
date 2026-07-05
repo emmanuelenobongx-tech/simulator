@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // User Profiles
+    match /users/{userId} {
+      // Anyone can read profiles (needed for public username availability checks)
+      allow read: if true;
+      
+      // Users can only create or update their own profile document
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+      
+      // Profiles cannot be deleted
+      allow delete: if false;
+    }
+
+    // --- SCORE SAVING / EXAM ATTEMPTS RULES ---
+    match /attempts/{attemptId} {
+      // Allow saving/creating new exam scores (attempts)
+      // - Guests (anonymous) can save scores with userId 'anonymous'
+      // - Registered users can save scores matching their specific authenticated UID
+      allow create: if request.resource.data.userId == 'anonymous' || 
+                    (request.auth != null && request.resource.data.userId == request.auth.uid);
+      
+      // Users can read:
+      // 1. Attempts that are published on the public leaderboard
+      // 2. Their own authenticated attempts
+      // 3. Anonymous/guest attempts
+      allow read: if resource.data.onLeaderboard == true || 
+                  (request.auth != null && resource.data.userId == request.auth.uid) || 
+                  resource.data.userId == 'anonymous';
+      
+      // Users can only update their own attempts (e.g. toggling leaderboard visibility)
+      // Attempts are otherwise immutable, and cannot be deleted
+      allow update: if (request.auth != null && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid) ||
+                    (resource.data.userId == 'anonymous' && request.resource.data.userId == 'anonymous');
+      
+      allow delete: if false;
+    }
+  }
+}
